@@ -17,6 +17,7 @@ import macho
 from makesig import make_signature
 import os
 import tempfile
+import stat
 
 log = logging.getLogger(__name__)
 
@@ -163,6 +164,12 @@ class Executable(Signable):
                     ApplicationSlot,
                     InfoSlot]
 
+    def sign(self, app, signer):
+        super(Executable, self).sign(app, signer)
+        st = os.stat(self.path)
+        os.chmod(self.path, st.st_mode | stat.S_IEXEC)
+
+
 class Dylib(Signable):
     """ A dynamic library that isn't part of its own bundle, e.g.
         the Swift libraries.
@@ -173,6 +180,7 @@ class Dylib(Signable):
     """
     slot_classes = [EntitlementsSlot,
                     RequirementsSlot]
+
 
 class Appex(Signable):
     """ An app extension  """
