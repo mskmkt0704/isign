@@ -248,6 +248,24 @@ def view(input_path):
             shutil.rmtree(temp_dir)
     return bundle_info
 
+def view(input_path):
+    if not exists(input_path):
+        raise IOError("{0} not found".format(input_path))
+    temp_dir = None
+    bundle_info = None
+    try:
+        archive = archive_factory(input_path)
+        (temp_dir, bundle) = archive.unarchive_to_temp()
+        bundle_info = bundle.info
+    except NotSignable as e:
+        log.info("Could not read: <{0}>: {1}\n".format(input_path, e))
+        raise
+    finally:
+        if temp_dir is not None and isdir(temp_dir):
+            shutil.rmtree(temp_dir)
+    return bundle_info
+
+
 def resign(input_path,
            certificate,
            key,

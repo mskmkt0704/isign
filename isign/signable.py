@@ -21,6 +21,7 @@ import stat
 
 log = logging.getLogger(__name__)
 
+
 class Signable(object):
     __metaclass__ = ABCMeta
 
@@ -152,6 +153,9 @@ class Signable(object):
         macho.MachoFile.build_stream(self.m, temp)
         temp.close()
 
+        # make copy have same permissions
+        mode = os.stat(self.path).st_mode
+        os.chmod(temp.name, mode)
         # log.debug("moving temporary file to {0}".format(self.path))
         os.rename(temp.name, self.path)
 
