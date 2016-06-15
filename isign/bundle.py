@@ -148,10 +148,14 @@ class Bundle(object):
                 plist_path = join(appex_path, 'Info.plist')
                 if not exists(plist_path):
                     continue
+                appex = AppEx(appex_path, self.new_appid)
+                appex.resign(signer, self.new_provision_path)
+                '''
                 plist = biplist.readPlist(plist_path)
                 appex_exec_path = join(appex_path, plist['CFBundleExecutable'])
                 appex = signable.Appex(self, appex_exec_path)
                 appex.sign(self, signer)
+                '''
 
         # then create the seal
         # TODO maybe the app should know what its seal path should be...
@@ -188,32 +192,88 @@ class App(Bundle):
     # executable of an app)
     signable_class = signable.Executable
 
-    def __init__(self, path):
+    def __init__(self, path, new_appid=None):
         super(App, self).__init__(path)
+        self.new_appid = new_appid
         self.entitlements_path = join(self.path,
                                       'Entitlements.plist')
         self.provision_path = join(self.path,
                                    'embedded.mobileprovision')
 
-    def provision(self, provision_path):
+    def copy_provision(self, provision_path):
         shutil.copyfile(provision_path, self.provision_path)
 
     def create_entitlements(self):
-        # profile is a PKCS#7 format
-        with open(self.provision_path, 'rb') as f:
-            profile_data = f.read()
+        biplist.writePlist(self.new_provision['Entitlements'], self.entitlements_path, binary=False)
+        # log.debug("wrote Entitlements to {0}".format(self.entitlements_path))
+
+    def change_bundle_id(self):
+        '''
+        check the provisioning profile bundleID is fit the old
+        '''
+        oldid = self.info['CFBundleIdentifier']
+        if self.new_appid is None:
+            newid = self.new_provision['Entitlements']['application-identifier']
+            self.new_appid = newid
+        else:
+            newid = self.new_appid
+        oldids = oldid.split(".")
+        newids = newid.split(".")[1:]  # erase teamid
+        num = min(len(oldids), len(newids))
+        for i in range(num):
+            if newids[i] == "*":
+                return
+            if newids[i] != oldids[i]:
+                break
+        else:
+            if len(oldids) == len(newids):
+                return
+        for i in range(len(newids)):
+            if newids[i] == "*":
+                newids[i] = "isign"
+        self.info['CFBundleIdentifier'] = ".".join(newids)
+        biplist.writePlist(self.info, self.info_path)
+        log.debug("change bundle id:{}->{}".format(oldid, newid))
+
+    def load_provision_data(self, provision_path):
+        '''
+        mobileprovision is a pkcs#7 format.
+        '''
+        f = open(provision_path, "rb")
+        profile_data = f.read()
+        f.close()
         beginstr = "<?xml version="
         endstr = "</plist>"
         begin_pos = profile_data.find(beginstr)
         end_pos = profile_data.find(endstr)
-        assert begin_pos != -1 and end_pos != -1, "entitlement not find"
+        assert begin_pos != -1 and end_pos != -1, "mobileprovision format error"
         profile_data = profile_data[begin_pos: end_pos + 8]
-        profile = biplist.readPlistFromString(profile_data)
-        biplist.writePlist(profile['Entitlements'], self.entitlements_path, binary=False)
-        # log.debug("wrote Entitlements to {0}".format(self.entitlements_path))
+        self.new_provision = biplist.readPlistFromString(profile_data)
+        self.new_provision_path = provision_path
 
-    def resign(self, signer, provisioning_profile):
-        """ signs app in place """
-        self.provision(provisioning_profile)
+    def resign(self, signer, provision_path):
+        self.load_provision_data(provision_path)
+        self.change_bundle_id()
+        self.copy_provision(provision_path)
         self.create_entitlements()
         super(App, self).resign(signer)
+
+
+class AppEx(App):
+    '''
+    the appex may not have provisioning profile and entitlements
+    not clear, but works now
+    '''
+    def copy_provision(self, provision_path):
+        if os.path.exists(self.provision_path):
+            shutil.copyfile(provision_path, self.provision_path)
+
+    def load_provision_data(self, provision_path):
+        if os.path.exists(provision_path):  # appex may not have the provisioning profile
+            super(AppEx, self).load_provision_data(provision_path)
+
+    def create_entitlements(self):
+        if not os.path.exists(self.provision_path):
+            del self.entitlements_path  # del it, otherwise the CodeSig will use it for set_entitlements
+            return
+        biplist.writePlist(self.new_provision['Entitlements'], self.entitlements_path, binary=False)
