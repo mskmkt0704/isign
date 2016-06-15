@@ -125,7 +125,7 @@ class AppZip(object):
 
     def unarchive_to_temp(self):
         containing_dir = make_temp_dir()
-        call([get_helper('unzip'), "-qu", self.path, "-d", containing_dir])
+        call([get_helper('unzip'), "-O", "UTF-8", "-qu", self.path, "-d", containing_dir])
         app_dir = abspath(os.path.join(containing_dir, self.relative_app_dir))
         return containing_dir, App(app_dir)
 
@@ -231,6 +231,7 @@ def process_watchkit(root_bundle_path, should_remove=False):
         else:
             raise NotSignable("Cannot yet sign WatchKit bundles")
 
+
 def view(input_path):
     if not exists(input_path):
         raise IOError("{0} not found".format(input_path))
@@ -247,6 +248,7 @@ def view(input_path):
         if temp_dir is not None and isdir(temp_dir):
             shutil.rmtree(temp_dir)
     return bundle_info
+
 
 def view(input_path):
     if not exists(input_path):

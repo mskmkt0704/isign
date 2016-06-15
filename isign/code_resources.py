@@ -176,7 +176,7 @@ class ResourceBuilder(object):
                 for key, hash_method in self.hash_methods.iteritems():
                     if hash_method not in hash_digests:
                         raise Exception("Expected hash digest missing")
-                    val[key] = plistlib.Data(hash_digests[hash_method])
+                    val[key.decode("utf-8")] = plistlib.Data(hash_digests[hash_method])
 
                 if rule.is_optional():
                     val['optional'] = True
@@ -185,7 +185,7 @@ class ResourceBuilder(object):
                 if len(val) == 1 and 'optional' not in val:
                     val = val.values()[0]
 
-                file_entries[relative_path] = val
+                file_entries[relative_path.decode("utf-8")] = val
 
             for dirname in dirs:
                 rule, path, relative_path = self.get_rule_and_paths(root,
