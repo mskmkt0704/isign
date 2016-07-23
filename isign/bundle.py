@@ -58,7 +58,14 @@ class Bundle(object):
             executable_name = self.info['CFBundleExecutable']
         else:
             executable_name, _ = splitext(basename(self.path))
-        executable = join(self.path, executable_name)
+        try:
+            executable = join(self.path, executable_name)
+        except UnicodeDecodeError:
+            executable_name = executable_name.encode('utf-8')
+            executable = join(self.path, executable_name)
+        except UnicodeEncodeError:
+            executable_name = executable_name.decode('utf-8')
+            executable = join(self.path, executable_name)
         if not exists(executable):
             raise Exception(
                 'could not find executable for {0}'.format(self.path))

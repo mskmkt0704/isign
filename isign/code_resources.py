@@ -9,10 +9,11 @@ import re
 
 OUTPUT_DIRECTORY = '_CodeSignature'
 OUTPUT_FILENAME = 'CodeResources'
+RESOURCE_RULES_FILE_NAME = 'ResourceRules.plist'
 TEMPLATE_FILENAME = 'code_resources_template.xml'
+TEMPLATE_FILENAME2 = 'code_resources_template2.xml'
 # DIGEST_ALGORITHM = "sha1"
 HASH_BLOCKSIZE = 65536
-
 log = logging.getLogger(__name__)
 
 
@@ -148,6 +149,8 @@ class ResourceBuilder(object):
                 rule, path, relative_path = self.get_rule_and_paths(root,
                                                                     filename)
                 # log.debug(rule_debug_fmt.format(rule, path, relative_path))
+                if relative_path == "CodeResources":
+                    continue
 
                 # skip this file if the rule for this path is to exclude
                 if rule.is_exclusion():
@@ -181,11 +184,10 @@ class ResourceBuilder(object):
                 if rule.is_optional():
                     val['optional'] = True
 
-                # if there's only one, non-optional hash, unwrap it from the dict
-                if len(val) == 1 and 'optional' not in val:
-                    val = val.values()[0]
-
-                file_entries[relative_path.decode("utf-8")] = val
+                if len(val) == 1 and 'hash' in val:
+                    file_entries[relative_path.decode("utf-8")] = val['hash']
+                else:
+                    file_entries[relative_path.decode("utf-8")] = val
 
             for dirname in dirs:
                 rule, path, relative_path = self.get_rule_and_paths(root,
@@ -199,7 +201,6 @@ class ResourceBuilder(object):
                     dirs.remove(dirname)
 
         return file_entries
-
 
 @memoize
 def get_hash_digests(path):
@@ -227,13 +228,16 @@ def get_hash_digests(path):
             hashlib.sha256: sha256_hasher.digest()}
 
 
-def get_template():
+def get_template(has_resource_rules=False):
     """
     Obtain the 'template' plist which also contains things like
     default rules about which files should count
     """
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    template_path = os.path.join(current_dir, TEMPLATE_FILENAME)
+    if has_resource_rules:
+        template_path = os.path.join(current_dir, TEMPLATE_FILENAME2)
+    else:
+        template_path = os.path.join(current_dir, TEMPLATE_FILENAME)
     fh = open(template_path, 'r')
     return plistlib.readPlist(fh)
 
@@ -257,13 +261,15 @@ def make_seal(source_app_path, target_dir=None):
     """
     if target_dir is None:
         target_dir = os.path.dirname(source_app_path)
-    template = get_template()
+    resource_rules_path = os.path.join(target_dir, RESOURCE_RULES_FILE_NAME)
+    has_resource_rules = os.path.exists(resource_rules_path)
+    template = get_template(has_resource_rules)
     # n.b. code_resources_template not only contains a template of
     # what the file should look like; it contains default rules
     # deciding which files should be part of the seal
     rules = template['rules2']
     plist = copy.deepcopy(template)
-    resource_builder = ResourceBuilder(source_app_path, rules)
+    resource_builder = ResourceBuilder(source_app_path, rules, has_resource_rules)
     plist['files'] = resource_builder.scan()
     resource_builder2 = ResourceBuilder(source_app_path, rules, True, True)
     plist['files2'] = resource_builder2.scan()
